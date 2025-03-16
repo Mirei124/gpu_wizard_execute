@@ -1,0 +1,15 @@
+{
+  "core_count": 1,
+  "memory_per_core": 1,
+  "gpu_percent": 50,
+  "check_times": 1,
+  "check_interval": 15,
+  "gpu_env": "GPU_LIST",
+  "set_envs": [
+    "HF_ENDPOINT=https://hf-mirror.com",
+    "TRANSFORMERS_OFFLINE=1",
+    "HF_HUB_OFFLINE=1",
+    "HF_DATASETS_OFFLINE=1"
+  ],
+  "unset_envs": []
+}
