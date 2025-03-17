@@ -1,8 +1,10 @@
 use clap::CommandFactory;
 use clap::Parser;
+use env_logger::Builder;
 use log::{LevelFilter, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::env;
 use std::fmt::Debug;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -94,13 +96,26 @@ struct Cli {
 
     #[arg(help = "Specify the command to execute.")]
     cmd: Vec<String>,
+
+    #[arg(short, long, help = "Increase output verbosity.")]
+    verbose: bool,
 }
 
 fn main() {
-    env_logger::init();
-    log::set_max_level(LevelFilter::Warn);
-
     let cli = Cli::parse();
+    if cli.verbose {
+        Builder::new().filter_level(LevelFilter::Info).init();
+    } else {
+        match env::var("RUST_LOG") {
+            Ok(_) => {
+                Builder::from_default_env().init();
+            }
+            Err(_) => {
+                Builder::new().filter_level(LevelFilter::Warn).init();
+            }
+        }
+    }
+
     if cli.print_default_config {
         println!(
             "Default config:\n{}",
@@ -156,8 +171,6 @@ fn main() {
         config.check_times,
         config.check_interval,
     );
-
-    dbg!(&cli.cmd);
 
     run_command(
         &cli.cmd.join(" "),
