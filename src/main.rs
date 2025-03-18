@@ -7,9 +7,9 @@ use serde_json;
 use std::env;
 use std::fmt::Debug;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -50,7 +50,7 @@ struct Cli {
     #[arg(short, long, help = "Set the memory (GB) available on each GPU.")]
     memory_per_core: Option<u32>,
 
-    #[arg(short, long, help = "Define the percentage of free GPU cores.")]
+    #[arg(short, long, help = "Set the GPU usage available on each GPU.")]
     gpu_percent: Option<usize>,
 
     #[arg(short = 'k', long, help = "Set the number of checks to perform.")]
@@ -88,8 +88,8 @@ struct Cli {
     )]
     config_path: Option<PathBuf>,
 
-    #[arg(short, long, help = "Print the default configuration.")]
-    print_default_config: bool,
+    #[arg(short, long, help = "Print the current configuration.")]
+    print_config: bool,
 
     #[arg(short = 'w', long, help = "Save the current configuration to a file.")]
     save_config: bool,
@@ -116,14 +116,6 @@ fn main() {
         }
     }
 
-    if cli.print_default_config {
-        println!(
-            "Default config:\n{}",
-            serde_json::to_string_pretty(&default_config()).unwrap()
-        );
-        return;
-    }
-
     let (config_path, strict) = match cli.config_path.as_deref() {
         Some(v) => (v, true),
         None => (Path::new(".plan.json"), false),
@@ -140,7 +132,7 @@ fn main() {
         config.gpu_percent = v;
     }
     if let Some(v) = cli.check_times {
-        config.gpu_percent = v;
+        config.check_times = v;
     }
     if let Some(v) = cli.check_interval {
         config.check_interval = v;
@@ -149,10 +141,27 @@ fn main() {
         config.gpu_env = v;
     }
     if let Some(v) = cli.set_envs {
-        config.set_envs = v;
+        if v.len() > 0 {
+            config.set_envs = v;
+        }
     }
     if let Some(v) = cli.unset_envs {
-        config.unset_envs = v;
+        if v.len() > 0 {
+            config.unset_envs = v;
+        }
+    }
+
+    if cli.print_config {
+        println!(
+            "Current config:\n{}",
+            serde_json::to_string_pretty(&config).unwrap()
+        );
+        return;
+    } else {
+        info!(
+            "Current config:\n{}",
+            serde_json::to_string_pretty(&config).unwrap()
+        );
     }
 
     if cli.save_config {
@@ -223,7 +232,7 @@ fn check_resource_enough(
 ) -> Option<Vec<String>> {
     let mut available_gpu = vec![];
     for gpu_info in gpu_info_list {
-        if gpu_info.memory_free > memory_per_core && gpu_info.gpu_free > gpu_percent {
+        if gpu_info.memory_free >= memory_per_core && gpu_info.gpu_free >= gpu_percent {
             available_gpu.push((gpu_info.index, gpu_info.gpu_free));
         }
     }
@@ -276,16 +285,12 @@ fn run_command(
     println!(r"*** Start run `{}` ***", &cmd);
     println!(r"*** Using GPU `{}` ***", &gpus);
     let mut command = Command::new("sh");
-    command
-        .arg("-c")
-        .arg(&cmd)
-        .env(gpu_env, gpus)
-        .stdout(Stdio::piped());
+    command.arg("-c").arg(&cmd).env(gpu_env, gpus);
 
     for s in env {
         let kvs: Vec<&str> = s.splitn(2, "=").collect();
         if kvs.len() != 2 {
-            warn!("Args parse error: {}", s);
+            warn!("set_envs parse error: {}", s);
             continue;
         }
         command.env(kvs[0], kvs[1]);
@@ -295,17 +300,7 @@ fn run_command(
     }
 
     let mut child = command.spawn().expect("Execute cmd failed");
-    let stdout = child.stdout.take().unwrap();
-    let mut reader = BufReader::new(stdout);
-    let mut buffer: String = String::new();
-    while let Ok(n) = reader.read_line(&mut buffer) {
-        if n > 0 {
-            print!("{}", buffer);
-            buffer.clear();
-        } else {
-            break;
-        }
-    }
+    child.wait().unwrap();
     println!(r"*** Stop run ***");
 }
 
