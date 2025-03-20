@@ -10,6 +10,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -300,8 +301,9 @@ fn run_command(
     }
 
     let mut child = command.spawn().expect("Execute cmd failed");
-    child.wait().unwrap();
+    let status = child.wait().unwrap();
     println!(r"*** Stop run ***");
+    exit(status.code().unwrap());
 }
 
 fn default_config() -> Config {
